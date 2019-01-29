@@ -64,9 +64,11 @@ def consume(th_queue, params):
     except queue.Empty:
         pass
     if params.mode == 'countdown':
-        delta = params.end - params.start
+        delta =  params.end - params.start
+        date_r = datetime.datetime(1, 1, 1) + delta
+        remaining = f"{date_r.day - 1}d{date_r.hour}h{date_r.minute}m"
         with canvas(device) as draw:
-            text(draw, (0, 0), str(delta), fill="white", font=proportional(TINY_FONT))
+            text(draw, (0, 0), remaining, fill="white", font=proportional(TINY_FONT))
     else:
         raise NotImplementedError
 
