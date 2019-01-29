@@ -21,70 +21,70 @@ device = max7219(serial, cascaded=4, block_orientation=90)
 
 
 class SprintParams:
-	def __init__(self, settings_path: str, **kwargs):
-		if kwargs.get('zero', False):
-			self.start = datetime.datetime.now()
-			self.end = datetime.datetime.now()
-			self.mode = 'countdown'
-		else:
-			self.load_file(settings_path)
+    def __init__(self, settings_path: str, **kwargs):
+        if kwargs.get('zero', False):
+            self.start = datetime.datetime.now()
+            self.end = datetime.datetime.now()
+            self.mode = 'countdown'
+        else:
+            self.load_file(settings_path)
 
-	def load_file(self, settings_path: str):
-		with open(settings_path, 'r') as fhandler:
-			j_data = json.load(fhandler)
-		self.start = datetime.strptime(j_data.get('start'), "%Y-%m-%d %H-%M-%S")
-		self.end = datetime.strptime(j_data.get('end'), "%Y-%m-%d %H-%M-%S")
-		self.mode = j_data.get('mode')
+    def load_file(self, settings_path: str):
+        print(f"Loading file {settings_path}")
+        with open(settings_path, 'r') as fhandler:
+            j_data = json.load(fhandler)
+        self.start = datetime.datetime.strptime(j_data.get('start'), "%Y-%m-%d %H:%M:%S")
+        self.end = datetime.datetime.strptime(j_data.get('end'), "%Y-%m-%d %H:%M:%S")
+        self.mode = j_data.get('mode')
 
 
 class SprintWallProtocol(DatagramProtocol):
-	def __init__(self, queue):
-		self.queue = queue
-		super().__init__()
+    def __init__(self, queue):
+        self.queue = queue
+        super().__init__()
 
-	def datagramReceived(self, data, *args):
-		print(f"Received {data}")
-		self.queue.put(data)
+    def datagramReceived(self, data, *args):
+        print(f"Received {data}")
+        self.queue.put(data)
 
 
 def deferred_error(failure):
-	printf(failure.getBriefTraceback())
+    print(failure.getBriefTraceback())
 
 
 def consume(th_queue, params):
-	try:
-		item = th_queue.get_nowait()
-		print(f"Consuming {item}")
-		if os.path.isfile(item):
-			params.load_file(item)
-		else:
-			print(f"file {item} does not exist, skipping.")
-		th_queue.task_done()
-	except queue.Empty:
-		pass
-	if params.mode == 'countdown':
-		delta = params.end - params.start
-		remaining = delta.strftime("%Hh%Mm%ss")
-		with canvas(device) as draw:
-			text(draw, (0, 0), remaining, fill="white", font=proportional(TINY_FONT))
-	else:
-		raise NotImplementedError
+    try:
+        item = th_queue.get_nowait()
+        print(f"Consuming {item}")
+        if os.path.isfile(item):
+            params.load_file(item)
+        else:
+            print(f"file {item} does not exist, skipping.")
+        th_queue.task_done()
+    except queue.Empty:
+        pass
+    if params.mode == 'countdown':
+        delta = params.end - params.start
+        with canvas(device) as draw:
+            text(draw, (0, 0), str(delta), fill="white", font=proportional(TINY_FONT))
+    else:
+        raise NotImplementedError
 
 
 def main():
-	l_params = SprintParams('./settings.json')
-	l_queue = queue.Queue()
-	reactor.listenUDP(7000, SprintWallProtocol(l_queue))
-	loop = task.LoopingCall(consume, l_queue, l_params)
-	loop_deffered = loop.start(60)
-	loop_deffered.addErrback(deferred_error)
-	try:
-		print("Running reactor")
-		reactor.run()
-	except KeyboardInterrupt:
-		print("Killing the machine (yeah!)")
+    l_params = SprintParams('./settings.json')
+    l_queue = queue.Queue()
+    reactor.listenUDP(7000, SprintWallProtocol(l_queue))
+    loop = task.LoopingCall(consume, l_queue, l_params)
+    loop_deffered = loop.start(60)
+    loop_deffered.addErrback(deferred_error)
+    try:
+        print("Running reactor")
+        reactor.run()
+    except KeyboardInterrupt:
+        print("Killing the machine (yeah!)")
 
 
 if __name__ == "__main__":
-	main()
+    main()
 
