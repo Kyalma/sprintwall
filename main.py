@@ -1,4 +1,5 @@
 from __future__ import print_function
+import argparse
 import queue
 import os
 import json
@@ -13,11 +14,13 @@ from luma.core.render import canvas
 from luma.led_matrix.device import max7219
 from luma.core.legacy import text
 from luma.core.legacy import show_message
-from luma.core.legacy.font import proportional, CP437_FONT, LCD_FONT, TINY_FONT
+from luma.core.legacy.font import proportional, CP437_FONT, TINY_FONT
 
+
+MATRIX_COUNT = 4
 
 serial = spi(port=0, device=0, gpio=noop())
-device = max7219(serial, cascaded=4, block_orientation=90)
+device = max7219(serial, cascaded=MATRIX_COUNT, block_orientation=90)
 
 
 class SprintParams:
@@ -52,6 +55,27 @@ def deferred_error(failure):
     print(failure.getBriefTraceback())
 
 
+def format_remaining_time(remaining) -> str:
+    output = "{:02d}m".format(remaining.minute)
+    if remaining.hour != 0 or remaining.day - 1 > 0:
+        output = "{:02d}h{}".format(remaining.hour, output)
+    if remaining.day - 1 > 0:
+        output = f"{remaining.day - 1}d{output}"
+    return output
+
+
+def display_text(text_msg: str, font=TINY_FONT):
+    if len(text_msg) <= MATRIX_COUNT * 2:
+        with canvas(device) as draw:
+            text(draw,
+                 ((MATRIX_COUNT * 2 - len(text_msg)) * 2 , 0),
+                 text_msg,
+                 fill="white",
+                 font=proportional(font))
+    else:
+        show_message(device, text_msg, fill="white", font=proportional(font))
+
+
 def consume(th_queue, params):
     try:
         item = th_queue.get_nowait()
@@ -64,17 +88,23 @@ def consume(th_queue, params):
     except queue.Empty:
         pass
     if params.mode == 'countdown':
-        delta =  params.end - params.start
+        delta =  params.end - datetime.datetime.now()
         date_r = datetime.datetime(1, 1, 1) + delta
-        remaining = f"{date_r.day - 1}d{date_r.hour}h{date_r.minute}m"
-        with canvas(device) as draw:
-            text(draw, (0, 0), remaining, fill="white", font=proportional(TINY_FONT))
+        remaining = format_remaining_time(date_r)
+        # print(f"Remaining {remaining}")
+        display_text(remaining, TINY_FONT)
     else:
         raise NotImplementedError
 
 
 def main():
-    l_params = SprintParams('./settings.json')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-s', '--settings',
+                        type=str,
+                        default='./settings.json',
+                        help='location of the default settings json file')
+    args = parser.parse_args()
+    l_params = SprintParams(args.settings)
     l_queue = queue.Queue()
     reactor.listenUDP(7000, SprintWallProtocol(l_queue))
     loop = task.LoopingCall(consume, l_queue, l_params)
