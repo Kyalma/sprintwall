@@ -9,7 +9,7 @@ from luma.core.legacy import text
 from luma.core.legacy import show_message
 from luma.core.legacy.font import proportional, CP437_FONT, LCD_FONT, TINY_FONT
 
-serial = spi(port=0, device=0, gpio=noop())
+serial = spi(port=0, device=1, gpio=noop())
 device = max7219(serial, cascaded=4, block_orientation=90)
 
 for font in (CP437_FONT, LCD_FONT, TINY_FONT):

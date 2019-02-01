@@ -4,6 +4,9 @@ import queue
 import os
 import json
 import datetime
+import time
+
+from threading import Lock
 
 from twisted.internet.protocol import DatagramProtocol
 from twisted.internet import reactor
@@ -16,11 +19,20 @@ from luma.core.legacy import text
 from luma.core.legacy import show_message
 from luma.core.legacy.font import proportional, CP437_FONT, TINY_FONT
 
+g_lock = Lock()
 
 MATRIX_COUNT = 4
 
-serial = spi(port=0, device=0, gpio=noop())
-device = max7219(serial, cascaded=MATRIX_COUNT, block_orientation=90)
+serial0 = spi(port=0, device=0, gpio=noop())
+serial1 = spi(port=0, device=1, gpio=noop())
+top_bar = max7219(serial1, cascaded=MATRIX_COUNT, block_orientation=-90)
+low_bar = max7219(serial0, cascaded=MATRIX_COUNT, block_orientation=90)
+
+
+class TooLongError(Exception):
+    def __init__(self, message=None, errors=None):
+        super().__init__(message or "Message too long to fit the screen")
+        self.errors = errors
 
 
 class SprintParams:
@@ -29,6 +41,7 @@ class SprintParams:
             self.start = datetime.datetime.now()
             self.end = datetime.datetime.now()
             self.mode = 'countdown'
+            self.msg = 'No settings file initialized'
         else:
             self.load_file(settings_path)
 
@@ -36,6 +49,7 @@ class SprintParams:
         print(f"Loading file {settings_path}")
         with open(settings_path, 'r') as fhandler:
             j_data = json.load(fhandler)
+        self.msg = j_data.get('message')
         self.start = datetime.datetime.strptime(j_data.get('start'), "%Y-%m-%d %H:%M:%S")
         self.end = datetime.datetime.strptime(j_data.get('end'), "%Y-%m-%d %H:%M:%S")
         self.mode = j_data.get('mode')
@@ -64,7 +78,8 @@ def format_remaining_time(remaining) -> str:
     return output
 
 
-def display_text(text_msg: str, font=TINY_FONT):
+def display_text(text_msg: str, font=TINY_FONT, device=low_bar):
+    g_lock.acquire()
     if len(text_msg) <= MATRIX_COUNT * 2:
         with canvas(device) as draw:
             text(draw,
@@ -73,7 +88,9 @@ def display_text(text_msg: str, font=TINY_FONT):
                  fill="white",
                  font=proportional(font))
     else:
+        raise TooLongError
         show_message(device, text_msg, fill="white", font=proportional(font))
+    g_lock.release()
 
 
 def consume(th_queue, params):
@@ -87,12 +104,13 @@ def consume(th_queue, params):
         th_queue.task_done()
     except queue.Empty:
         pass
+    display_text(params.msg, TINY_FONT, top_bar)
     if params.mode == 'countdown':
         delta =  params.end - datetime.datetime.now()
         date_r = datetime.datetime(1, 1, 1) + delta
         remaining = format_remaining_time(date_r)
         # print(f"Remaining {remaining}")
-        display_text(remaining, TINY_FONT)
+        display_text(remaining, TINY_FONT, low_bar)
     else:
         raise NotImplementedError
 
@@ -106,10 +124,15 @@ def main():
     args = parser.parse_args()
     l_params = SprintParams(args.settings)
     l_queue = queue.Queue()
+
+    # display_text(l_params.msg, CP437_FONT, top_bar)
+    tasks = [
+        # task.LoopingCall(display_text, l_params.msg, CP437_FONT, top_bar).start(1),
+        task.LoopingCall(consume, l_queue, l_params).start(60)
+    ]
+    for deffered_task in tasks:
+        deffered_task.addErrback(deferred_error)
     reactor.listenUDP(7000, SprintWallProtocol(l_queue))
-    loop = task.LoopingCall(consume, l_queue, l_params)
-    loop_deffered = loop.start(60)
-    loop_deffered.addErrback(deferred_error)
     try:
         print("Running reactor")
         reactor.run()
