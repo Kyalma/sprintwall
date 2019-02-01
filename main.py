@@ -4,7 +4,7 @@ import queue
 import os
 import json
 import datetime
-import time
+import math
 
 from threading import Lock
 
@@ -19,9 +19,9 @@ from luma.core.legacy import text
 from luma.core.legacy import show_message
 from luma.core.legacy.font import proportional, CP437_FONT, TINY_FONT
 
-g_lock = Lock()
 
 MATRIX_COUNT = 4
+DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 serial0 = spi(port=0, device=0, gpio=noop())
 serial1 = spi(port=0, device=1, gpio=noop())
@@ -50,8 +50,8 @@ class SprintParams:
         with open(settings_path, 'r') as fhandler:
             j_data = json.load(fhandler)
         self.msg = j_data.get('message')
-        self.start = datetime.datetime.strptime(j_data.get('start'), "%Y-%m-%d %H:%M:%S")
-        self.end = datetime.datetime.strptime(j_data.get('end'), "%Y-%m-%d %H:%M:%S")
+        self.start = datetime.datetime.strptime(j_data.get('start'), DATETIME_FORMAT)
+        self.end = datetime.datetime.strptime(j_data.get('end'), DATETIME_FORMAT)
         self.mode = j_data.get('mode')
 
 
@@ -79,18 +79,16 @@ def format_remaining_time(remaining) -> str:
 
 
 def display_text(text_msg: str, font=TINY_FONT, device=low_bar):
-    g_lock.acquire()
     if len(text_msg) <= MATRIX_COUNT * 2:
+        if font == TINY_FONT:
+            pos = ((MATRIX_COUNT * 2 - len(text_msg)) * 2 , 0)
+        else:
+            pos = ((MATRIX_COUNT - len(text_msg)) * 4, 0)
         with canvas(device) as draw:
-            text(draw,
-                 ((MATRIX_COUNT * 2 - len(text_msg)) * 2 , 0),
-                 text_msg,
-                 fill="white",
-                 font=proportional(font))
+            text(draw, pos, text_msg, fill="white", font=proportional(font))
     else:
         raise TooLongError
-        show_message(device, text_msg, fill="white", font=proportional(font))
-    g_lock.release()
+        # show_message(device, text_msg, fill="white", font=proportional(font))
 
 
 def consume(th_queue, params):
@@ -112,7 +110,11 @@ def consume(th_queue, params):
         # print(f"Remaining {remaining}")
         display_text(remaining, TINY_FONT, low_bar)
     else:
-        raise NotImplementedError
+        until_start = params.end - params.start
+        until_now = params.end - datetime.datetime.now()
+        percent = math.floor(100 - (until_now.total_seconds() / until_start.total_seconds()))
+        display_text(f"{percent}%", TINY_FONT, low_bar)
+        # raise NotImplementedError
 
 
 def main():
