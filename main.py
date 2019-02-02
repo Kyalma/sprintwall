@@ -21,7 +21,7 @@ from luma.core.legacy.font import proportional, CP437_FONT, TINY_FONT
 
 
 MATRIX_COUNT = 4
-DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
+DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 serial0 = spi(port=0, device=0, gpio=noop())
 serial1 = spi(port=0, device=1, gpio=noop())
@@ -62,7 +62,7 @@ class SprintWallProtocol(DatagramProtocol):
 
     def datagramReceived(self, data, *args):
         print(f"Received {data}")
-        self.queue.put(data)
+        self.queue.put(data.decode())
 
 
 def deferred_error(failure):
@@ -112,7 +112,7 @@ def consume(th_queue, params):
     else:
         until_start = params.end - params.start
         until_now = params.end - datetime.datetime.now()
-        percent = math.floor(100 - (until_now.total_seconds() / until_start.total_seconds()))
+        percent = math.floor(100 - (until_now.total_seconds() / until_start.total_seconds()) * 100)
         display_text(f"{percent}%", TINY_FONT, low_bar)
         # raise NotImplementedError
 
@@ -121,7 +121,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--settings',
                         type=str,
-                        default='./settings.json',
+                        default='/home/pi/sprintwall/settings.json',
                         help='location of the default settings json file')
     args = parser.parse_args()
     l_params = SprintParams(args.settings)
