@@ -87,19 +87,20 @@ def display_text(text_msg: str, font=TINY_FONT, device=low_bar):
         with canvas(device) as draw:
             text(draw, pos, text_msg, fill="white", font=proportional(font))
     else:
-        raise TooLongError
-        # show_message(device, text_msg, fill="white", font=proportional(font))
+        # raise TooLongError
+        show_message(device, text_msg, fill="white", font=proportional(font), scroll_delay=0.1)
 
 
 def consume(th_queue, params):
     try:
-        item = th_queue.get_nowait()
-        print(f"Consuming {item}")
-        if os.path.isfile(item):
-            params.load_file(item)
-        else:
-            print(f"file {item} does not exist, skipping.")
-        th_queue.task_done()
+        while not th_queue.empty():
+            item = th_queue.get_nowait()
+            print(f"Consuming {item}")
+            if os.path.isfile(item):
+                params.load_file(item)
+            else:
+                print(f"file {item} does not exist, skipping.")
+            th_queue.task_done()
     except queue.Empty:
         pass
     display_text(params.msg, TINY_FONT, top_bar)
