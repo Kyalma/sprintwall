@@ -1,0 +1,6 @@
+node-red-contrib-ibm-watson-iot@0.2.8
+├── node-red-contrib-moment@3.0.1
+├── node-red-dashboard@2.13.1
+├── node-red-node-ping@0.0.16
+├── node-red-node-random@0.1.2
+├── node-red-node-serialport@0.6.8
